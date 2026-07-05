@@ -18,10 +18,10 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include "jwt.h"
-
+#include "logger.h"
 #define MAX_USERS       1000
 #define MAX_SESSION     100
-#define PORT 2020
+#define PORT            2020
 #define MAX_EVENTS      128
 
 int epfd;

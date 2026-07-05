@@ -150,7 +150,7 @@ void handleSend(Connection *conn, char *msg, size_t msg_len)
     else
     {
         // Success: 'written' contains the number of bytes successfully sent
-        printf("Successfully wrote %d bytes.\n", written);
+        LOG_INFO("Successfully wrote %d bytes.\n", written);
     }
 }
 bool checkUser(Connection *conn,
@@ -175,36 +175,44 @@ bool checkUser(Connection *conn,
         }
         if (strcasecmp(cmd, "Login") == 0)
         {
+            LOG_INFO("Login request recieved");
             if (login_user(user, pwd))
             {
+                LOG_INFO("User = %s Logged in ",user);
                 create_jwt(user, jwt, sizeof(jwt));
                 handleSend(conn, jwt, strlen(jwt));
                 return true;
             }
             snprintf(msg, sizeof(msg), "Logged-in Failed");
             handleSend(conn, msg, strlen(msg));
+            LOG_WARN("Login request failed");
             return false;
         }
         else if (strcasecmp(cmd, "register") == 0)
         {
+            LOG_INFO("Register request recieved");
             if (!valid_username(user))
             {
+                LOG_WARN("User = %s is not valid", user);
                 snprintf(msg, sizeof(msg), "user = %s not valid ", user);
                 handleSend(conn, msg, strlen(msg));
-                return false;                
+                return false;
             }
             if (!validate_password(pwd))
             {
+                LOG_WARN("User = %s has invalid paasword", user);
                 snprintf(msg, sizeof(msg), "password = %s not valid ", user);
                 handleSend(conn, msg, strlen(msg));
-                return false;                
+                return false;
             }
             if (register_user(user, pwd))
             {
+                LOG_INFO("User = %s has registered", user);
                 snprintf(msg, sizeof(msg), "Registered user = %s ", user);
                 handleSend(conn, msg, strlen(msg));
                 return true;
             }
+            LOG_WARN("Register failed", user);
             return false;
         }
     }
@@ -219,7 +227,7 @@ bool checkUser(Connection *conn,
             handleSend(conn, "Invalid Token", 13);
             return false;
         }
-        printf("Authenticated user = %s\n", username);
+        LOG_INFO("Authenticated user = %s\n", username);
         return true;
     }
     return false;
@@ -248,6 +256,7 @@ void handleRecv(Connection *conn)
         {
             return;
         }
+        LOG_INFO("Connection closed");
         connection_destroy(conn);
     }
 }
@@ -299,32 +308,40 @@ bool valid_username(char user[64])
 }
 bool validate_password(char pwd[16])
 {
-   if (pwd == NULL)
-   {
-       return false;
-   }
-   int len = strlen(pwd);
-
-   if (len <= 3)
-   {
+    if (pwd == NULL)
+    {
         return false;
-   }
+    }
+    int len = strlen(pwd);
+
+    if (len <= 3)
+    {
+        return false;
+    }
 
     bool has_upper = false;
     bool has_lower = false;
     bool has_digit = false;
     bool has_special = false;
 
-  for (size_t i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++)
+    {
         unsigned char ch = pwd[i]; // Cast to avoid undefined behavior in ctype functions
 
-        if (isupper(ch)) {
+        if (isupper(ch))
+        {
             has_upper = true;
-        } else if (islower(ch)) {
+        }
+        else if (islower(ch))
+        {
             has_lower = true;
-        } else if (isdigit(ch)) {
+        }
+        else if (isdigit(ch))
+        {
             has_digit = true;
-        } else if (ispunct(ch)) { 
+        }
+        else if (ispunct(ch))
+        {
             // ispunct checks for printable punctuation characters like !, @, #, $, etc.
             has_special = true;
         }
@@ -338,10 +355,15 @@ int main()
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    printf("Auth server is running\n");
+    if (log_init("app.log", LOG_INFO) != 0)
+    {
+        fprintf(stderr, "Failed to initialize logging system\n");
+        return 1;
+    }
 
     if (!SSL_initiallization())
     {
+        LOG_ERROR("SSL_initiallization Failed");
         return 1;
     }
     Connection *conn = malloc(sizeof(Connection));
@@ -351,6 +373,7 @@ int main()
     if (fd < 0)
     {
         free(conn);
+        LOG_ERROR("Socket creation failed ");
         perror(fd);
         return 0;
     }
@@ -375,13 +398,14 @@ int main()
 
     if (bind(fd, (struct sockaddr *)(&authserver_addr), sizeof(authserver_addr)) < 0)
     {
+        LOG_ERROR("Bind creation failed ");
         perror("Bind");
         return 0;
     }
 
     if (listen(fd, 5) < 0)
     {
-        perror("listen");
+        LOG_ERROR("Listen failed ");
         return 0;
     }
     epfd = epoll_create1(0);
@@ -401,10 +425,11 @@ int main()
               EPOLL_CTL_ADD,
               conn->fd,
               &ev);
+    LOG_INFO("Server starting up on port %d...", 2020);
     while (running)
     {
         int ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
-
+        LOG_DEBUG("Eopll wait ready = %d",ready);
         for (int i = 0; i < ready; i++)
         {
             // int client_fd = events[i].data.fd;
@@ -441,7 +466,7 @@ int main()
                     close(client_fd);
                     continue;
                 }
-                printf("TLS handshake successful \n");
+                LOG_INFO("TLS Handshake successful");
                 /* End SSL Handshake */
 
                 Connection *client = malloc(sizeof(Connection));
